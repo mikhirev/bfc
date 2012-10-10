@@ -1,0 +1,126 @@
+#!/usr/bin/perl
+
+use strict;
+use warnings;
+use Cwd;
+use Youri::Package::RPM;
+use Git;
+use YAML::XS;
+use HTTP::SimpleLinkChecker;
+use Digest::SHA1;
+
+=head1 NAME
+
+bfc - ABF command-line client
+
+=head1 SYNOPSIS
+
+bfc <action> [options]
+
+Actions:
+
+    sync    sync sources and patches
+
+=head1 DESCRIPTION
+
+Build farm client is an alternative ABF client. It helps managing git repos
+and ABF tasks.
+
+=cut
+
+
+my %options = (
+    'sync'  => ''
+);
+
+my $action = shift @ARGV;
+
+if ($action eq 'sync') {
+    sync();
+} else {
+    die "wrong syntax\n";
+}
+
+sub sync {
+    my ($specfile) = <*.spec>
+        or die "Can't find any spec file\n";
+    my $rpm_class = Youri::Package::RPM->get_wrapper_class();
+    my $spec = $rpm_class->new_spec($specfile, anyarch => 1, force => 1)
+        or die "Can't parse spec file $specfile\n";
+    my @sources = ($specfile, $spec->sources(), $spec->icon());
+    my $git = Git->repository(cwd())
+        or die "Not in the git working directory\n";
+    my @trackedfiles = split /\n/, $git->command('ls-files');
+    my @filestoupload;
+    my $abfyml;
+    if (-f '.abf.yml') {
+        $abfyml = YAML::XS::LoadFile('.abf.yml');
+        foreach my $file (keys %{$abfyml->{sources}}) {
+            if ($file ~~ @sources) {
+                unless (checkfilestore($abfyml->{sources}{$file})) {
+                    push @filestoupload, $file;
+                }
+            } else {
+                delete $abfyml->{sources}{$file};
+            }
+        }
+    }
+    foreach my $file (@sources) {
+        unless ($abfyml->{sources}{$file}) {
+            if (-f $file) {
+                if (-T _) {
+                    unless ($file ~~ @trackedfiles) {
+                        $git->command('add', $file)
+                            and print "added $file\n";
+                    }
+                } else {
+                    my $ctx = Digest::SHA1->new();
+                    open(my $FILE, "<", $file);
+                    $ctx->addfile($FILE);
+                    $abfyml->{sources}{$file} = $ctx->hexdigest();
+                    unless (checkfilestore($abfyml->{sources}{$file})) {
+                        push @filestoupload, $file;
+                    }
+                }
+            } else {
+                print STDERR "No such file: $file\n";
+            }
+        }
+    }
+    YAML::XS::DumpFile('.abf.yml', $abfyml);
+    unless ('.abf.yml' ~~ @trackedfiles) {
+        $git->command('add', '.abf.yml') and print "added .abf.yml\n";
+    }
+    push @sources, '.abf.yml';
+    foreach my $file (@trackedfiles) {
+        if ($file ~~ @sources) {
+            if ($abfyml->{sources}{$file}) {
+                $git->command('rm', '--cached', $file);
+                print "$file removed from git index\n";
+            }
+        } else {
+            $git->command('rm', $file);
+            print "$file removed\n";
+        }
+    }
+    if (@filestoupload) {
+        print "\nYou need to upload following files to file store:\n";
+        print join("\n", @filestoupload) . "\n";
+    }
+}
+
+sub checkfilestore {
+    my ($sha1) = @_;
+    my $url = "http://file-store.rosalinux.ru/download/$sha1";
+    my $status = HTTP::SimpleLinkChecker::check_link($url);
+    if ($status == 404) {
+        return 0;
+    } elsif ($status == 200) {
+        return 1;
+    } else {
+        print STDERR "Warning: requesting $url failed\n";
+        print STDERR "HTTP response: $status: $HTTP::SimpleLinkChecker::ERROR\n";
+        return -1;
+    }
+ 
+}
