@@ -1,4 +1,0 @@
-bfc
-===
-
-Build Farm Client
