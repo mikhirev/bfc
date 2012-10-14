@@ -59,11 +59,9 @@ if ($action eq 'sync') {
 }
 
 sub sync {
-    my ($specfile) = <*.spec>
-        or die "Can't find any spec file\n";
-    my $rpm_class = Youri::Package::RPM->get_wrapper_class();
-    my $spec = $rpm_class->new_spec($specfile, anyarch => 1, force => 1)
-        or die "Can't parse spec file $specfile\n";
+    set_rpm_dirs();
+    my $specfile = find_spec();
+    my $spec = init_spec($specfile);
     my @sources = ($specfile, $spec->sources(), $spec->icon());
     my $git = Git->repository(cwd())
         or die "Not in the git working directory\n";
@@ -140,4 +138,25 @@ sub checkfilestore {
         return -1;
     }
  
+}
+
+sub find_spec {
+    my ($specfile) = <*.spec>
+        or die "Can't find any spec file in\n";
+    return $specfile;
+}
+
+sub init_spec {
+    my ($specfile) = @_;
+    my $rpm_class = Youri::Package::RPM->get_wrapper_class();
+    my $spec = $rpm_class->new_spec($specfile, anyarch => 1, force => 1)
+        or die "Can't parse spec file $specfile\n";
+    return $spec;
+}
+
+sub set_rpm_dirs {
+    my $rpm_class = Youri::Package::RPM->get_wrapper_class();
+    foreach ("_sourcedir", "_specdir") {
+        $rpm_class->add_macro("$_ " . cwd());
+    }
 }
