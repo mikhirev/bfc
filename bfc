@@ -17,9 +17,15 @@ bfc - ABF command-line client
 
 bfc <action> [options]
 
-Actions:
+=head2 Actions:
 
-    sync    sync sources and patches
+=over 8
+
+=item sync
+
+sync sources and patches
+
+=back
 
 =head1 DESCRIPTION
 
