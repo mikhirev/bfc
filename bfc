@@ -85,8 +85,8 @@ sub sync {
             if (-f $file) {
                 if (-T _) {
                     unless ($file ~~ @trackedfiles) {
-                        $git->command('add', $file)
-                            and print "added $file\n";
+                        $git->command('add', $file);
+                        print "added $file\n";
                     }
                 } else {
                     my $ctx = Digest::SHA1->new();
