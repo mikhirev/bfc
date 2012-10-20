@@ -6,7 +6,7 @@ use Cwd;
 use Youri::Package::RPM;
 use Git;
 use YAML::XS;
-use HTTP::SimpleLinkChecker;
+use HTTP::SimpleLinkChecker qw(check_link);
 use Digest::SHA1;
 
 =head1 NAME
@@ -74,6 +74,7 @@ sub sync {
     my @trackedfiles = split /\n/, $git->command('ls-files');
     my @filestoupload;
     my $abfyml;
+
     if (-f '.abf.yml') {
         $abfyml = YAML::XS::LoadFile('.abf.yml');
         foreach my $file (keys %{$abfyml->{sources}}) {
@@ -86,6 +87,7 @@ sub sync {
             }
         }
     }
+
     foreach my $file (@sources) {
         unless ($abfyml->{sources}{$file}) {
             if (-f $file) {
@@ -108,11 +110,14 @@ sub sync {
             }
         }
     }
+
     YAML::XS::DumpFile('.abf.yml', $abfyml);
+
     unless ('.abf.yml' ~~ @trackedfiles) {
         $git->command('add', '.abf.yml') and print "added .abf.yml\n";
     }
     push @sources, '.abf.yml';
+
     foreach my $file (@trackedfiles) {
         if ($file ~~ @sources) {
             if ($abfyml->{sources}{$file}) {
@@ -124,6 +129,7 @@ sub sync {
             print "$file removed\n";
         }
     }
+
     if (@filestoupload) {
         print "\nYou need to upload following files to file store:\n";
         print join("\n", @filestoupload) . "\n";
@@ -133,7 +139,7 @@ sub sync {
 sub checkfilestore {
     my ($sha1) = @_;
     my $url = "http://file-store.rosalinux.ru/download/$sha1";
-    my $status = HTTP::SimpleLinkChecker::check_link($url);
+    my $status = check_link($url);
     if ($status == 404) {
         return 0;
     } elsif ($status == 200) {
