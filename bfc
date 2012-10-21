@@ -26,6 +26,10 @@ bfc <action> [options]
 
 fetch new sources from upstream
 
+=item g[et]
+
+get all sources for local build
+
 =item s[ync]
 
 sync sources and patches
@@ -56,28 +60,18 @@ along with this program.  If not, see L<http://www.gnu.org/licenses/>.
 
 =cut
 
-
-my %options = (
-    'sync'      => '',
-    'fetch'     => ''
-);
-
 my $action = shift @ARGV;
 
 for ($action) {
     /^f(etch)?$/        ?       fetch() :
+    /^g(et)?$/          ?       get()   :
     /^s(ync)?$/         ?       sync()  :
     die "wrong syntax\n";
 }
 
 sub fetch {
-    my $specfile = find_spec();
-    my $spec = init_spec($specfile);
-
-    my $abfyml;
-    if (-f '.abf.yml') {
-        $abfyml = YAML::XS::LoadFile('.abf.yml');
-    }
+    my $spec = init_spec();
+    my $abfyml = read_abfyml();
 
     my @sourceurls = ($spec->sources_url(), $spec->icon_url());
     @sourceurls = map { m/^(https?|ftp):/ ? $_ : () } @sourceurls;
@@ -86,7 +80,26 @@ sub fetch {
         m([^/]+$);
         unless (-f $& or checkfilestore($abfyml->{sources}{$&})) {
             print "$&\n";
-            getstore($_, $&) or print STDERR "can't download $_\n";
+            getstore($_, $&) or print STDERR "Can't download $_\n";
+        }
+    }
+}
+
+sub get {
+    my $spec = init_spec();
+    my $abfyml = read_abfyml();
+    my @sourceurls = ($spec->sources_url(), $spec->icon_url());
+
+    foreach (@sourceurls) {
+        m([^/]+$);
+        unless (-f $&) {
+            print "$&\n";
+            if (my $sha1 = $abfyml->{sources}{$&}) {
+                getstore("http://file-store.rosalinux.ru/download/$sha1", $&)
+                    or print STDERR "Can't download $& from file store\n";
+            } else {
+                getstore($_, $&) or print STDERR "Can't download $_\n";
+            }
         }
     }
 }
@@ -100,10 +113,9 @@ sub sync {
         or die "Not in the git working directory\n";
     my @trackedfiles = split /\n/, $git->command('ls-files');
     my @filestoupload;
-    my $abfyml;
+    my $abfyml = read_abfyml();
 
-    if (-f '.abf.yml') {
-        $abfyml = YAML::XS::LoadFile('.abf.yml');
+    if ($abfyml) {
         foreach my $file (keys %{$abfyml->{sources}}) {
             if ($file ~~ @sources) {
                 unless (checkfilestore($abfyml->{sources}{$file})) {
@@ -181,16 +193,24 @@ sub checkfilestore {
 
 sub find_spec {
     my ($specfile) = <*.spec>
-        or die "Can't find any spec filepn";
+        or die "Can't find any spec file\n";
     return $specfile;
 }
 
 sub init_spec {
-    my ($specfile) = @_;
+    my ($specfile) = @_ || (find_spec());
     my $rpm_class = Youri::Package::RPM->get_wrapper_class();
     my $spec = $rpm_class->new_spec($specfile, anyarch => 1, force => 1)
         or die "Can't parse spec file $specfile\n";
     return $spec;
+}
+
+sub read_abfyml {
+    my $abfyml;
+    if (-f '.abf.yml') {
+        $abfyml = YAML::XS::LoadFile('.abf.yml');
+    }
+    return $abfyml;
 }
 
 sub set_rpm_dirs {
