@@ -198,7 +198,7 @@ sub find_spec {
 }
 
 sub init_spec {
-    my ($specfile) = @_ || (find_spec());
+    my ($specfile) = @_ ? @_ : (find_spec());
     my $rpm_class = Youri::Package::RPM->get_wrapper_class();
     my $spec = $rpm_class->new_spec($specfile, anyarch => 1, force => 1)
         or die "Can't parse spec file $specfile\n";
