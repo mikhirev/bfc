@@ -8,6 +8,7 @@ use Git;
 use YAML::XS;
 use HTTP::SimpleLinkChecker qw(check_link);
 use Digest::SHA1;
+use LWP::Simple qw(getstore);
 
 =head1 NAME
 
@@ -21,7 +22,11 @@ bfc <action> [options]
 
 =over 8
 
-=item sync
+=item f[etch]
+
+fetch new sources from upstream
+
+=item s[ync]
 
 sync sources and patches
 
@@ -53,15 +58,37 @@ along with this program.  If not, see L<http://www.gnu.org/licenses/>.
 
 
 my %options = (
-    'sync'  => ''
+    'sync'      => '',
+    'fetch'     => ''
 );
 
 my $action = shift @ARGV;
 
-if ($action eq 'sync') {
-    sync();
-} else {
+for ($action) {
+    /^f(etch)?$/        ?       fetch() :
+    /^s(ync)?$/         ?       sync()  :
     die "wrong syntax\n";
+}
+
+sub fetch {
+    my $specfile = find_spec();
+    my $spec = init_spec($specfile);
+
+    my $abfyml;
+    if (-f '.abf.yml') {
+        $abfyml = YAML::XS::LoadFile('.abf.yml');
+    }
+
+    my @sourceurls = ($spec->sources_url(), $spec->icon_url());
+    @sourceurls = map { m/^(https?|ftp):/ ? $_ : () } @sourceurls;
+
+    foreach (@sourceurls) {
+        m([^/]+$);
+        unless (-f $& or checkfilestore($abfyml->{sources}{$&})) {
+            print "$&\n";
+            getstore($_, $&) or print STDERR "can't download $_\n";
+        }
+    }
 }
 
 sub sync {
@@ -94,7 +121,7 @@ sub sync {
                 if (-T _) {
                     unless ($file ~~ @trackedfiles) {
                         $git->command('add', $file);
-                        print "added $file\n";
+                        print "$file added\n";
                     }
                 } else {
                     my $ctx = Digest::SHA1->new();
@@ -137,7 +164,7 @@ sub sync {
 }
 
 sub checkfilestore {
-    my ($sha1) = @_;
+    my ($sha1) = @_ || return;
     my $url = "http://file-store.rosalinux.ru/download/$sha1";
     my $status = check_link($url);
     if ($status == 404) {
@@ -154,7 +181,7 @@ sub checkfilestore {
 
 sub find_spec {
     my ($specfile) = <*.spec>
-        or die "Can't find any spec file in\n";
+        or die "Can't find any spec filepn";
     return $specfile;
 }
 
