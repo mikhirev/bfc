@@ -176,7 +176,7 @@ sub sync {
 }
 
 sub checkfilestore {
-    my ($sha1) = @_ || return;
+    my ($sha1) = @_ or return;
     my $url = "http://file-store.rosalinux.ru/download/$sha1";
     my $status = check_link($url);
     if ($status == 404) {
