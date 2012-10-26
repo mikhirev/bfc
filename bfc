@@ -105,7 +105,6 @@ sub get {
 }
 
 sub sync {
-    set_rpm_dirs();
     my $specfile = find_spec();
     my $spec = init_spec($specfile);
     my @sources = ($specfile, $spec->sources(), $spec->icon());
@@ -200,6 +199,7 @@ sub find_spec {
 sub init_spec {
     my ($specfile) = @_ ? @_ : (find_spec());
     my $rpm_class = Youri::Package::RPM->get_wrapper_class();
+    set_rpm_dirs();
     my $spec = $rpm_class->new_spec($specfile, anyarch => 1, force => 1)
         or die "Can't parse spec file $specfile\n";
     return $spec;
