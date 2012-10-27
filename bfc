@@ -8,7 +8,7 @@ use Git;
 use YAML::XS;
 use HTTP::SimpleLinkChecker qw(check_link);
 use Digest::SHA1;
-use LWP::Simple qw(getstore);
+use LWP::Simple qw(getstore is_error);
 
 =head1 NAME
 
@@ -63,9 +63,9 @@ along with this program.  If not, see L<http://www.gnu.org/licenses/>.
 my $action = shift @ARGV;
 
 for ($action) {
-    /^f(etch)?$/        ?       fetch() :
-    /^g(et)?$/          ?       get()   :
-    /^s(ync)?$/         ?       sync()  :
+    /^f(etch)?$/        ?       fetch(@ARGV)    :
+    /^g(et)?$/          ?       get(@ARGV)      :
+    /^s(ync)?$/         ?       sync(@ARGV)     :
     die "wrong syntax\n";
 }
 
@@ -78,9 +78,11 @@ sub fetch {
 
     foreach (@sourceurls) {
         m([^/]+$);
-        unless (-f $& or checkfilestore($abfyml->{sources}{$&})) {
+        unless (-f $& or
+            $abfyml->{sources}{$&} and checkfilestore($abfyml->{sources}{$&}))
+        {
             print "$&\n";
-            getstore($_, $&) or print STDERR "Can't download $_\n";
+            download($_, $&);
         }
     }
 }
@@ -95,10 +97,9 @@ sub get {
         unless (-f $&) {
             print "$&\n";
             if (my $sha1 = $abfyml->{sources}{$&}) {
-                getstore("http://file-store.rosalinux.ru/download/$sha1", $&)
-                    or print STDERR "Can't download $& from file store\n";
+                download("http://file-store.rosalinux.ru/download/$sha1", $&);
             } else {
-                getstore($_, $&) or print STDERR "Can't download $_\n";
+                download($_, $&);
             }
         }
     }
@@ -217,5 +218,13 @@ sub set_rpm_dirs {
     my $rpm_class = Youri::Package::RPM->get_wrapper_class();
     foreach ("_sourcedir", "_specdir") {
         $rpm_class->add_macro("$_ " . cwd());
+    }
+}
+
+sub download {
+    my ($url, $file) = @_;
+    my $result = getstore($url, $file);
+    if (is_error($result)) {
+        print STDERR "Can't download $_: server returned $result.\n";
     }
 }
