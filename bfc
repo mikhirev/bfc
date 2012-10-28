@@ -11,6 +11,7 @@ use Digest::SHA1;
 use LWP::Simple qw(getstore is_error);
 use LWP::UserAgent;
 use HTTP::Request::Common qw(POST);
+use HTTP::Status qw(status_message);
 
 =head1 NAME
 
@@ -174,7 +175,7 @@ sub sync {
                     }
                 }
             } else {
-                print STDERR "No such file: $file\n";
+                warn "No such file: $file\n";
             }
         }
     }
@@ -213,8 +214,8 @@ sub checkfilestore {
     } elsif ($status == 200) {
         return 1;
     } else {
-        print STDERR "Warning: requesting $url failed\n";
-        print STDERR "HTTP response: $status: $HTTP::SimpleLinkChecker::ERROR\n";
+        warn "Warning: requesting $url failed\n";
+        warn "HTTP response: $status: $HTTP::SimpleLinkChecker::ERROR\n";
         return -1;
     }
  
@@ -252,9 +253,10 @@ sub set_rpm_dirs {
 
 sub download {
     my ($url, $file) = @_;
-    my $result = getstore($url, $file);
-    if (is_error($result)) {
-        print STDERR "Can't download $_: server returned $result.\n";
+    my $rc = getstore($url, $file);
+    if (is_error($rc)) {
+        my $message = status_message($rc);
+        warn "Can't download $_: $rc: $message\n";
     }
 }
 
@@ -269,7 +271,7 @@ sub fsupload {
                             'file_store[file]'  => [$file] ];
     my $ua = LWP::UserAgent->new;
     my $result = $ua->request($request);
-    if (is_error($result)) {
+    if ($result->is_error()) {
         warn "Error uploading $filename: $result->code: $result->message\n";
         return;
     } else {
