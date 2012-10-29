@@ -48,23 +48,6 @@ sync sources and patches
 Build farm client is an alternative ABF client. It helps managing git repos
 and ABF tasks.
 
-=head1 COPYRIGHT
-
-Copyright (C) 2012, Dmitry Mikhirev
-
-This program is free software: you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
-the Free Software Foundation, either version 3 of the License, or
-(at your option) any later version.
-
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
-
-You should have received a copy of the GNU General Public License
-along with this program.  If not, see L<http://www.gnu.org/licenses/>.
-
 =cut
 
 my $action = shift @ARGV;
@@ -76,6 +59,15 @@ for ($action) {
     /^s(ync)?$/         ?       sync(@ARGV)     :
     die "wrong syntax\n";
 }
+
+=head1 ACTIONS
+
+=head2 fetch
+
+Fetch sources from upstream. Only new sources that are not available locally
+nor at file store are downloaded.
+
+=cut
 
 sub fetch {
     my $spec = init_spec();
@@ -95,6 +87,14 @@ sub fetch {
     }
 }
 
+=head2 get
+
+Get all sources to perform local build. If source file is available at file
+store it is downloaded from there, otherwise URL specified in spec file
+is used.
+
+=cut
+
 sub get {
     my $spec = init_spec();
     my $abfyml = read_abfyml();
@@ -112,6 +112,15 @@ sub get {
         }
     }
 }
+
+=head2 push
+
+Push all commited changes to origin (like git push) and upload all files
+specified in .abf.yml to file store (if they are not alredy there). Files
+for upload must be available locally; if they are not, run B<bfc fetch>
+command before.
+
+=cut
 
 sub pushcmd {
     my $specfile = find_spec();
@@ -134,6 +143,15 @@ sub pushcmd {
         }
     }
 }
+
+=head2 sync
+
+Read source files from spec file, add text (or zero-legth) ones to git tree
+and binary ones to .abf.yml. Files not mentioned in spec will be removed
+from git tree and .abf.yml. New source files must be available locally;
+if they are not, run B<bfc fetch> command before.
+
+=cut
 
 sub sync {
     my $specfile = find_spec();
@@ -278,3 +296,23 @@ sub fsupload {
         return $result->content;
     }
 }
+
+__END__
+
+=head1 COPYRIGHT
+
+Copyright (C) 2012, Dmitry Mikhirev
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see L<http://www.gnu.org/licenses/>.
+
