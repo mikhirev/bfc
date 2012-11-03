@@ -41,6 +41,10 @@ push local changes to ABF
 
 sync sources and patches
 
+=item up[load]
+
+upload sources to file store
+
 =back
 
 =head1 DESCRIPTION
@@ -57,6 +61,7 @@ for ($action) {
     /^g(et)?$/          ?       get(@ARGV)      :
     /^p(ush)?$/		?	pushcmd(@ARGV)	:
     /^s(ync)?$/         ?       sync(@ARGV)     :
+    /^up(load)?$/       ?       upload(@ARGV)   :
     die "wrong syntax\n";
 }
 
@@ -115,10 +120,10 @@ sub get {
 
 =head2 push
 
-Push all commited changes to origin (like git push) and upload all files
-specified in .abf.yml to file store (if they are not alredy there). Files
-for upload must be available locally; if they are not, run B<bfc fetch>
-command before.
+Push all commited changes to origin and upload all files specified in
+I<.abf.yml> to file store. It does the same as running
+
+    git push && bfc upload
 
 =cut
 
@@ -127,28 +132,16 @@ sub pushcmd {
     my $spec = init_spec($specfile);
     my $git = Git->repository(cwd())
         or die "Not in the git working directory\n";
-    my $abfyml = read_abfyml();
 
-    $git->command('push');
-    if ($abfyml) {
-        foreach my $file (keys %{$abfyml->{sources}}) {
-            unless (checkfilestore($abfyml->{sources}{$file})) {
-                if (-f $file) {
-                    print "Uploading $file...\n";
-                    fsupload($file);
-                } else {
-                    warn "No such file: $file\n";
-                }
-            }
-        }
-    }
+    $git->command('push', @_);
+    upload();
 }
 
 =head2 sync
 
 Read source files from spec file, add text (or zero-legth) ones to git tree
-and binary ones to .abf.yml. Files not mentioned in spec will be removed
-from git tree and .abf.yml. New source files must be available locally;
+and binary ones to I<.abf.yml>. Files not mentioned in spec will be removed
+from git tree and I<.abf.yml>. New source files must be available locally;
 if they are not, run B<bfc fetch> command before.
 
 =cut
@@ -220,6 +213,33 @@ sub sync {
     if (@filestoupload) {
         print "\nYou need to upload following files to file store:\n";
         print join("\n", @filestoupload) . "\n";
+    }
+}
+
+=head2 upload
+
+Upload files listed in I<.abf.yml> to file store if they were not yet. If you
+have updated your specfile, you should run
+
+    bfc fetch && bfc sync
+
+before to get sources locally and add them to I<.abf.yml>.
+
+=cut
+
+sub upload {
+    my $abfyml = read_abfyml();
+    if ($abfyml) {
+        foreach my $file (keys %{$abfyml->{sources}}) {
+            unless (checkfilestore($abfyml->{sources}{$file})) {
+                if (-f $file) {
+                    print "Uploading $file...\n";
+                    fsupload($file);
+                } else {
+                    warn "No such file: $file\n";
+                }
+            }
+        }
     }
 }
 
