@@ -12,6 +12,9 @@ use LWP::Simple qw(getstore is_error);
 use LWP::UserAgent;
 use HTTP::Request::Common qw(POST);
 use HTTP::Status qw(status_message);
+use Config::IniFiles;
+use Net::Netrc;
+use Term::ReadKey qw(ReadMode);
 
 =head1 NAME
 
@@ -54,18 +57,78 @@ and ABF tasks.
 
 =cut
 
-my $action = shift @ARGV;
+our $config = Config::IniFiles->new( -file => "/etc/bfc.conf" );
+if (-r "$ENV{HOME}/.bfc.conf") {
+    $config = Config::IniFiles->new(
+        -file   => "$ENV{HOME}/.bfc.conf",
+        -import => $config
+    );
+}
+
+my $action = shift @ARGV || "";
 
 for ($action) {
-    /^f(etch)?$/        ?       fetch(@ARGV)    :
-    /^g(et)?$/          ?       get(@ARGV)      :
-    /^p(ush)?$/		?	pushcmd(@ARGV)	:
-    /^s(ync)?$/         ?       sync(@ARGV)     :
-    /^up(load)?$/       ?       upload(@ARGV)   :
+    /^c(lean)?[-_]?t(ree)?$/    ?   cleantree(@ARGV)    :
+    /^f(etch)?$/                ?   fetch(@ARGV)        :
+    /^g(et)?$/                  ?   get(@ARGV)          :
+    /^p(ush)?$/		        ?   pushcmd(@ARGV)      :
+    /^s(ync)?$/                 ?   sync(@ARGV)         :
+    /^up(load)?$/               ?   upload(@ARGV)       :
     die "wrong syntax\n";
 }
 
 =head1 ACTIONS
+
+=head2 cleantree
+
+Clean git tree from binary files, e.g. tarballs. This command should not be
+run directly but by B<git filter-branch>:
+
+    git filter-branch --tree-filter 'bfc cleantree' -- --all
+
+It finds binary files in git tree, add them to I<.abf.yml>, uploads to file
+store and then removes. Before running this command ensure that you have
+fetched all remote branches. Be very careful because pushing your changes
+to remote repository will overwrite any commits added after your last fetch.
+Use this two commands for push:
+
+    git push --force --all
+    git push --force --tags
+
+=cut
+
+sub cleantree {
+    my @trackedfiles = <*>;
+    my $abfyml = eval{ read_abfyml() };
+    my $fs_baseurl = fs_baseurl();
+
+    if ($abfyml) {
+        foreach my $file (keys %{$abfyml->{sources}}) {
+            if ($file ~~ @trackedfiles) {
+                unless (checkfilestore($abfyml->{sources}{$file})) {
+                    fs_upload($file);
+                }
+            }
+        }
+    }
+
+    foreach my $file (@trackedfiles) {
+        unless ($abfyml->{sources}{$file}) {
+            unless (-T $file) {
+                my $ctx = Digest::SHA1->new();
+                open(my $FILE, "<", $file);
+                $ctx->addfile($FILE);
+                $abfyml->{sources}{$file} = $ctx->hexdigest();
+                unless (checkfilestore($abfyml->{sources}{$file})) {
+                    fs_upload($file);
+                }
+                `rm $file`;
+            }
+        }
+    }
+
+    YAML::XS::DumpFile('.abf.yml', $abfyml);
+}
 
 =head2 fetch
 
@@ -104,13 +167,14 @@ sub get {
     my $spec = init_spec();
     my $abfyml = read_abfyml();
     my @sourceurls = ($spec->sources_url(), $spec->icon_url());
+    my $baseurl = $config->val('file-store', 'baseurl');
 
     foreach (@sourceurls) {
         m([^/]+$);
         unless (-f $&) {
             print "$&\n";
             if (my $sha1 = $abfyml->{sources}{$&}) {
-                download("http://file-store.rosalinux.ru/download/$sha1", $&);
+                download("$baseurl/download/$sha1", $&);
             } else {
                 download($_, $&);
             }
@@ -120,10 +184,10 @@ sub get {
 
 =head2 push
 
-Push all commited changes to origin and upload all files specified in
-I<.abf.yml> to file store. It does the same as running
-
-    git push && bfc upload
+Push all commited changes to origin (like git push) and upload all files
+specified in I<.abf.yml> to file store (if they are not alredy there). Files
+for upload must be available locally; if they are not, run B<bfc fetch>
+command before.
 
 =cut
 
@@ -228,24 +292,30 @@ before to get sources locally and add them to I<.abf.yml>.
 =cut
 
 sub upload {
-    my $abfyml = read_abfyml();
-    if ($abfyml) {
-        foreach my $file (keys %{$abfyml->{sources}}) {
-            unless (checkfilestore($abfyml->{sources}{$file})) {
-                if (-f $file) {
-                    print "Uploading $file...\n";
-                    fsupload($file);
-                } else {
-                    warn "No such file: $file\n";
+    my @files;
+    if (@_) {
+        @files = @_;
+    } else {
+        my $abfyml = read_abfyml();
+        if ($abfyml) {
+            foreach my $file (keys %{$abfyml->{sources}}) {
+                unless (checkfilestore($abfyml->{sources}{$file})) {
+                    if (-f $file) {
+                        push @files, $file;
+                    } else {
+                        warn "No such file: $file\n";
+                    }
                 }
             }
         }
     }
+    fs_upload(@files);
 }
 
 sub checkfilestore {
     my ($sha1) = @_ or return;
-    my $url = "http://file-store.rosalinux.ru/download/$sha1";
+    my $baseurl = $config->val('file-store', 'baseurl');
+    my $url = "$baseurl/download/$sha1";
     my $status = check_link($url);
     if ($status == 404) {
         return 0;
@@ -276,7 +346,7 @@ sub init_spec {
 
 sub read_abfyml {
     my $abfyml;
-    if (-f '.abf.yml') {
+    if (-r '.abf.yml') {
         $abfyml = YAML::XS::LoadFile('.abf.yml');
     }
     return $abfyml;
@@ -298,23 +368,70 @@ sub download {
     }
 }
 
-sub fsupload {
-    my ($file) = @_;
-    my ($filename) = $file =~ m{([^/]+)$};
-    my $url = 'http://file-store.rosalinux.ru/api/v1/file_stores';
-    $HTTP::Request::Common::DYNAMIC_FILE_UPLOAD = 1;
-    my $request = POST $url,
-    	Content_Type    => 'form-data',
-	Content         => [ name               => $filename,
-                            'file_store[file]'  => [$file] ];
-    my $ua = LWP::UserAgent->new;
-    my $result = $ua->request($request);
-    if ($result->is_error()) {
-        warn "Error uploading $filename: $result->code: $result->message\n";
-        return;
-    } else {
-        return $result->content;
+sub fs_upload {
+    my $baseurl = fs_baseurl();
+    foreach (@_) {
+        my ($filename) = $_ =~ m{([^/]+)$};
+        my $url = "$baseurl/api/v1/file_stores";
+        $HTTP::Request::Common::DYNAMIC_FILE_UPLOAD = 1;
+        my $request = POST $url,
+                Content_Type    => 'form-data',
+                Content         => [ name               => $filename,
+                                    'file_store[file]'  => [$_] ];
+        my $ua = LWP::UserAgent->new;
+        my $result = $ua->request($request);
+        if ($result->is_error()) {
+            warn "Error uploading $filename: " .
+                    $result->code . ": " .
+                    $result->message . "\n";
+            return;
+        } else {
+            return $result->content;
+        }
     }
+}
+
+sub fs_baseurl {
+    my $url = $config->val('file-store', 'baseurl');
+    my $username = fs_username();
+    my $password = fs_password();
+
+    $url =~ s|(^\w+://)|$1${username}:${password}@|;
+    $url =~ s|/$||;
+    return $url;
+}
+
+sub fs_username {
+    my ($hostname) = $config->val('file-store', 'baseurl') =~ m{(?<=://)([a-z0-9-.]+)};
+    my $netrc = Net::Netrc->lookup(fs_hostname());
+    my $username;
+    if ($netrc) {
+        $username = $netrc->login;
+    } else {
+        print "ABF file store username: ";
+        $username = <>;
+        chomp $username;
+    }
+    return $username;
+}
+
+sub fs_password {
+    my $netrc = Net::Netrc->lookup(fs_hostname());
+    my $password;
+    if ($netrc) {
+        $password = $netrc->password;
+    } else {
+        print "ABF file store password: ";
+        ReadMode 'noecho';
+        $password = <>;
+        ReadMode 'restore';
+        chomp $password;
+    }
+    return $password;
+}
+
+sub fs_hostname {
+    $config->val('file-store', 'baseurl') =~ m{(?<=://)([a-z0-9-.]+)};
 }
 
 __END__
