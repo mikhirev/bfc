@@ -228,6 +228,7 @@ sub sync {
                 }
             } else {
                 delete $abfyml->{sources}{$file};
+                print "$file removed from .abf.yml";
             }
         }
     }
@@ -238,13 +239,14 @@ sub sync {
                 if (-T _) {
                     unless ($file ~~ @trackedfiles) {
                         $git->command('add', $file);
-                        print "$file added\n";
+                        print "$file added to git index\n";
                     }
                 } else {
                     my $ctx = Digest::SHA1->new();
                     open(my $FILE, "<", $file);
                     $ctx->addfile($FILE);
                     $abfyml->{sources}{$file} = $ctx->hexdigest();
+                    print "$file added to .abf.yml\n";
                     unless (checkfilestore($abfyml->{sources}{$file})) {
                         push @filestoupload, $file;
                     }
@@ -379,6 +381,7 @@ sub fs_upload {
                 Content         => [ name               => $filename,
                                     'file_store[file]'  => [$_] ];
         my $ua = LWP::UserAgent->new;
+        print "Uploading $filename\n";
         my $result = $ua->request($request);
         if ($result->is_error()) {
             warn "Error uploading $filename: " .
