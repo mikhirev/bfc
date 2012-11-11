@@ -4,6 +4,7 @@ use strict;
 use warnings;
 use Cwd;
 use Youri::Package::RPM;
+use Youri::Package::RPM::Builder;
 use Git;
 use YAML::XS;
 use HTTP::SimpleLinkChecker qw(check_link);
@@ -16,6 +17,7 @@ use Config::IniFiles;
 use Net::Netrc;
 use Term::ReadKey qw(ReadMode);
 use File::Remove qw(remove);
+use Getopt::Std qw(getopts);
 
 =head1 NAME
 
@@ -28,6 +30,10 @@ bfc <action> [options]
 =head2 Actions:
 
 =over 8
+
+=item b[uild]
+
+build package locally
 
 =item f[etch]
 
@@ -69,16 +75,91 @@ if (-r "$ENV{HOME}/.bfc.conf") {
 my $action = shift @ARGV || "";
 
 for ($action) {
-    /^c(lean)?[-_]?t(ree)?$/    ?   cleantree(@ARGV)    :
-    /^f(etch)?$/                ?   fetch(@ARGV)        :
-    /^g(et)?$/                  ?   get(@ARGV)          :
-    /^p(ush)?$/		        ?   pushcmd(@ARGV)      :
-    /^s(ync)?$/                 ?   sync(@ARGV)         :
-    /^up(load)?$/               ?   upload(@ARGV)       :
+    /^b(uild)?$/                ?   build()         :
+    /^c(lean)?[-_]?t(ree)?$/    ?   cleantree()     :
+    /^f(etch)?$/                ?   fetch()         :
+    /^g(et)?$/                  ?   get()           :
+    /^p(ush)?$/		        ?   pushcmd()       :
+    /^s(ync)?$/                 ?   sync()          :
+    /^up(load)?$/               ?   upload(@ARGV)   :
     die "wrong syntax\n";
 }
 
 =head1 ACTIONS
+
+=head2 build
+
+Build a package in local system. Spec file and sources will be taken from
+current directory, but all other files will be located under I<$HOME/rpmbuild/>
+(or in other directories specified in rpm macros).
+
+=head3 Options:
+
+=over 4
+
+=item -a
+
+Build binary and source packages (default).
+
+=item -b
+
+Build binary packages.
+
+=item -p
+
+Execute the "%prep" stage from the spec file.
+
+=item -c
+
+Do the "%build" stage from the spec file.
+
+=item -i
+
+Do the "%install" stage from  the  spec  file.
+
+=item -l
+
+List check - check that files specified in "%files" section(s) exists.
+
+=item -s
+
+Build just the source package.
+
+=item -o
+
+Execute only the specified stage skipping all previous steps.
+
+=back
+
+=cut
+
+sub build {
+    my %opts;
+    my @stages = ('a', 'b', 'c', 'i', 'l', 'p', 's');
+    getopts(join('', @stages, 'o'), \%opts);
+    my %buildopts;
+    foreach (@stages) {
+        if ($opts{$_}) {
+            if ($buildopts{stage}) {
+                die "options -" .
+                    $buildopts{stage} .
+                    " and -" .
+                    $_ .
+                    " are mutually exclusive\n";
+            } else {
+                $buildopts{stage} = $_;
+            }
+        }
+    }
+    $buildopts{stage} = 'a' unless $buildopts{stage};
+    print "$buildopts{stage}\n";
+    $buildopts{options} = '--short-circuit' if $opts{o};
+    my $builder = Youri::Package::RPM::Builder->new(
+        sourcedir   => cwd(),
+        verbose     => 2
+    );
+    $builder->build(find_spec(), %buildopts);
+}
 
 =head2 cleantree
 
