@@ -15,6 +15,7 @@ use HTTP::Status qw(status_message);
 use Config::IniFiles;
 use Net::Netrc;
 use Term::ReadKey qw(ReadMode);
+use File::Remove qw(remove);
 
 =head1 NAME
 
@@ -122,7 +123,7 @@ sub cleantree {
                 unless (checkfilestore($abfyml->{sources}{$file})) {
                     fs_upload($file);
                 }
-                `rm $file`;
+                remove $file;
             }
         }
     }
