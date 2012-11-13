@@ -152,7 +152,6 @@ sub build {
         }
     }
     $buildopts{stage} = 'a' unless $buildopts{stage};
-    print "$buildopts{stage}\n";
     $buildopts{options} = '--short-circuit' if $opts{o};
     my $builder = Youri::Package::RPM::Builder->new(
         sourcedir   => cwd(),
@@ -310,7 +309,7 @@ sub sync {
                 }
             } else {
                 delete $abfyml->{sources}{$file};
-                print "$file removed from .abf.yml";
+                print "$file removed from .abf.yml\n";
             }
         }
     }
@@ -359,7 +358,7 @@ sub sync {
     }
 
     if (@filestoupload) {
-        print "\nYou need to upload following files to file store:\n";
+        print "\nFiles to be uploaded to file store:\n";
         print join("\n", @filestoupload) . "\n";
     }
 }
