@@ -157,7 +157,7 @@ sub build {
         sourcedir   => cwd(),
         verbose     => 2
     );
-    $builder->build(find_spec(), %buildopts);
+    eval { $builder->build(find_spec(), %buildopts) };
 }
 
 =head2 cleantree
