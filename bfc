@@ -18,6 +18,8 @@ use Net::Netrc;
 use Term::ReadKey qw(ReadMode);
 use File::Remove qw(remove);
 use Getopt::Std qw(getopts);
+use List::MoreUtils qw(first_index indexes);
+use ABF;
 
 =head1 NAME
 
@@ -43,9 +45,21 @@ fetch new sources from upstream
 
 get all sources for local build
 
+=item i[nfo]
+
+display info about ABF project
+
 =item p[ush]
 
 push local changes to ABF
+
+=item status
+
+display status of recent builds on ABF
+
+=item s[u]b[mit]
+
+submit project build to ABF
 
 =item s[ync]
 
@@ -79,7 +93,10 @@ for ($action) {
     /^c(lean)?[-_]?t(ree)?$/    ?   cleantree()     :
     /^f(etch)?$/                ?   fetch()         :
     /^g(et)?$/                  ?   get()           :
+    /^i(nfo)?$/                 ?   info()          :
     /^p(ush)?$/		        ?   pushcmd()       :
+    /^st(atus)?$/               ?   status()        :
+    /^su?b(mit)?$/              ?   submit()        :
     /^s(ync)?$/                 ?   sync()          :
     /^up(load)?$/               ?   upload(@ARGV)   :
     die "wrong syntax\n";
@@ -263,6 +280,36 @@ sub get {
     }
 }
 
+=head2 info
+
+    bfc info <owner>/<project>
+
+Show information about specified ABF project.
+
+=cut
+
+sub info {
+    my $fullname = shift @ARGV;
+    die "Usage: bfc info <owner>/<project>" unless $fullname && $fullname =~ m|^[^/]+/[^/]+$|;
+    my $abf = ABF->new( baseurl     => $config->val('abf', 'baseurl'),
+                        login       => abf_username(),
+                        password    => abf_password()
+    );
+    my $project = $abf->project(fullname => $fullname);
+    binmode(STDOUT,':utf8');
+    print "Project:\t\t" . $project->name() . "\n";
+    print "Owned by " . lcfirst($project->owner('type')) . ":\t\t" . $project->owner('name') . "\n";
+    print "Maintained by " . lcfirst($project->maintainer('type')) . ":\t" . $project->maintainer('name') . "\n";
+    eval { print "Package:\t\t" . ($project->is_package() ? 'yes' : 'no') . "\n" };
+    print "Created:\t\t" . localtime($project->created_at()) . "\n";
+    print "Last updated:\t\t" . localtime($project->updated_at()) . "\n";
+    print "Git URL:\t\t" . $project->git_url() . "\n";
+    print "Platforms:\t\t";
+    print join ', ', @{$project->repositories('platform', 'name')};
+    print "\n";
+    eval { print "\nDescription:\n" . $project->description() . "\n" };
+}
+
 =head2 push
 
 Push all commited changes to origin (like git push) and upload all files
@@ -280,6 +327,148 @@ sub pushcmd {
 
     $git->command('push', @_);
     upload();
+}
+
+=head2 status
+
+Show status of last builds submitted by current user.
+
+=cut
+
+sub status {
+    my $abf = ABF->new( baseurl     => $config->val('abf', 'baseurl'),
+                        login       => abf_username(),
+                        password    => abf_password()
+                    );
+
+    format STDOUT=
+---
+Build:  @<<<<<<<           Project:    @<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+        $_->id(),                      $_->project('fullname'),
+Status: @<<<<<<<<<<<<<<<<< Commit:     @<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+        $_->strstatus()    ,           $_->commit_hash(),
+                           Repository: @<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+             $_->build_for_platform('name').'/'.$_->save_to_repository('name'),
+                           Arch:       @<<<<<
+                                       $_->arch('name'),
+.
+
+    foreach ($abf->buildlists) {
+        write();
+    }
+
+}
+
+=head2 submit
+
+Submit project build to ABF.
+
+=head3 options
+
+=over 4
+
+=item -a
+
+Automatically publish packages.
+
+=item -p <platform>
+
+Specify target platform. If it is not specified explicitly, bfc will try to
+use platform with the same name as current git brunch, if it exists, or the
+one specified in configuration file as default.
+
+=item -r <revision>
+
+Git revision (commit hash, branch or tag). If not specified, the current
+branch will be used.
+
+-s <severity>
+
+Update severity. If not specified, the default value from configuration file
+will be used.
+
+=cut
+
+sub submit {
+    my %opts;
+    getopts('ap:r:s:', \%opts);
+    my $git = Git->repository(cwd())
+        or die "Not in the git working directory\n";
+
+    # git revision
+    my $gitrev = $opts{r} || '@{0}';
+    $gitrev = $git->command('rev-parse', $gitrev);
+    chomp $gitrev;
+
+    # update severity
+    my $severity = $opts{s} || $config->val('defaults', 'update_severity') ||
+        die 'update severity not specified';
+
+    # find project fullname
+    my $fullname = $git->config('remote.origin.url');
+    ($fullname) = $fullname =~ m|/(\w+/\w+)\.git$|;
+    my $abf = ABF->new( baseurl     => $config->val('abf', 'baseurl'),
+                        login       => abf_username(),
+                        password    => abf_password()
+    );
+    my $project = $abf->project(fullname => $fullname);
+
+    # guess target platform and repository
+    my @platforms = $project->repositories('platform', 'name');
+    my $branch = $git->command('branch') =~ /^\*\s(.*)$/;
+    my $repoidx;
+    if ($opts{p}) {
+        $repoidx = first_index { $_ == $opts{p}, @platforms } or
+            die "wrong platform $opts{p}\n";
+    } else {
+        $repoidx = first_index { $_ == $branch } @platforms ||
+            first_index { $_ == $config->val('defaults', 'platform') } @platforms ||
+            first_index { $_ == abf_username() . '_personal' } @platforms ||
+            die "cannot guess platform\n";
+    }
+    my $platformid = $project->repositories('platform', 'id')->[$repoidx];
+    my $repoid = $project->repositories('id')->[$repoidx];
+
+    # find repositories to include
+    my $reponame = $project->repositories('name')->[$repoidx];
+    my @repodeps = split /,/, $config->val('repodeps', $reponame);
+    my $platform = $abf->platform(id => $platformid);
+    my @includeidx = indexes { $_ ~~ @repodeps } @{$platform->repositories('name')};
+    my @includerepos;
+    foreach (@includeidx) {
+        push @includerepos, $platform->repositories('id')->[$_];
+    }
+
+    # target arches
+    my $spec = init_spec();
+    my $header = $spec->srcheader();
+    my @exclusivearch = $header->tag('exclusivearch');
+    my @excludearch = $header->tag('excludearch');
+    my $arches = $abf->arches();
+    my @archids;
+    foreach (@$arches) {
+        if ((!@exclusivearch or $_->{name} ~~ @exclusivearch) and
+            (!@excludearch or !($_->{name} ~~ @excludearch))) {
+            push @archids, $_->{id};
+        }
+    }
+
+    # now we can submit buildlists...
+    foreach (@archids) {
+        my $bl = $project->createbuildlist( commit_hash             => $gitrev,
+                                            update_type             => $severity,
+                                            save_to_repository_id   => $repoid,
+                                            build_for_platform_id   => $platformid,
+                                            auto_publish            => $opts{a} || 0,
+                                            build_requires          => JSON::false,
+                                            include_repos           => \@includerepos,
+                                            arch_id                 => $_ );
+        print 'Build list ' . $bl->id() . ' for ' . $bl->name() .
+            ' with ' . $bl->arch('name') . " architecture created\n";
+        print 'the package will be published in ' .
+            $bl->save_to_repository('platform', 'name') . '/' .
+            $bl->save_to_repository('name'). "\n\n";
+    }
 }
 
 =head2 sync
@@ -520,6 +709,38 @@ sub fs_hostname {
     $config->val('file-store', 'baseurl') =~ m{(?<=://)([a-z0-9-.]+)};
 }
 
+sub abf_username {
+    my ($hostname) = abf_hostname() =~ m{(?<=://)([a-z0-9-.]+)};
+    my $netrc = Net::Netrc->lookup(abf_hostname());
+    my $username;
+    if ($netrc) {
+        $username = $netrc->login;
+    } else {
+        print "ABF username: ";
+        $username = <>;
+        chomp $username;
+    }
+    return $username;
+}
+
+sub abf_password {
+    my $netrc = Net::Netrc->lookup(abf_hostname());
+    my $password;
+    if ($netrc) {
+        $password = $netrc->password;
+    } else {
+        print "ABF password: ";
+        ReadMode 'noecho';
+        $password = <>;
+        ReadMode 'restore';
+        chomp $password;
+    }
+    return $password;
+}
+
+sub abf_hostname {
+    $config->val('abf', 'baseurl') =~ m{(?<=://)([a-z0-9-.]+)};
+}
 __END__
 
 =head1 COPYRIGHT
