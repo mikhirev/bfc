@@ -414,17 +414,19 @@ sub submit {
     my $project = $abf->project(fullname => $fullname);
 
     # guess target platform and repository
-    my @platforms = $project->repositories('platform', 'name');
-    my $branch = $git->command('branch') =~ /^\*\s(.*)$/;
+    my @platforms = @{$project->repositories('platform', 'name')};
+    my ($branch) = $git->command('branch', '--no-color', '--no-column', '--no-abbrev') =~ /^\*\s(.*)$/m;
     my $repoidx;
     if ($opts{p}) {
         $repoidx = first_index { $_ == $opts{p}, @platforms } or
             die "wrong platform $opts{p}\n";
     } else {
-        $repoidx = first_index { $_ == $branch } @platforms ||
-            first_index { $_ == $config->val('defaults', 'platform') } @platforms ||
-            first_index { $_ == abf_username() . '_personal' } @platforms ||
-            die "cannot guess platform\n";
+        my @try_platforms = ($branch, $config->val('defaults', 'platform'),
+            abf_username() . '_personal');
+        while (!defined $repoidx) {
+            my $try = shift @try_platforms or die "cannot guess platform\n";
+            $repoidx = first_index { $_ eq $try } @platforms;
+        }
     }
     my $platformid = $project->repositories('platform', 'id')->[$repoidx];
     my $repoid = $project->repositories('id')->[$repoidx];
