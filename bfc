@@ -110,6 +110,9 @@ Build a package in local system. Spec file and sources will be taken from
 current directory, but all other files will be located under I<$HOME/rpmbuild/>
 (or in other directories specified in rpm macros).
 
+If source files are missing in workind directory, they are downloaded from File
+Store (if available) or from upstream.
+
 =head3 Options:
 
 =over 4
@@ -314,9 +317,9 @@ sub info {
 =head2 push
 
 Push all commited changes to origin (like git push) and upload all files
-specified in I<.abf.yml> to file store (if they are not alredy there). Files
-for upload must be available locally; if they are not, run B<bfc fetch>
-command before.
+specified in I<.abf.yml> to file store. If needed, new source files are
+downloaded, I<.abf.yml> and git index synced with specfile, and all changes
+committed.
 
 =cut
 
@@ -481,8 +484,8 @@ sub submit {
 
 Read source files from spec file, add text (or zero-legth) ones to git tree
 and binary ones to I<.abf.yml>. Files not mentioned in spec will be removed
-from git tree and I<.abf.yml>. New source files must be available locally;
-if they are not, run B<bfc fetch> command before.
+from git tree and I<.abf.yml>. New sources are downloaded from upstream if they
+are not present in working directory.
 
 =cut
 
@@ -564,7 +567,7 @@ sub sync {
 Upload files listed in I<.abf.yml> to file store if they were not yet. If you
 have updated your specfile, you should run
 
-    bfc fetch && bfc sync
+    bfc sync
 
 before to get sources locally and add them to I<.abf.yml>.
 
