@@ -151,6 +151,7 @@ Execute only the specified stage skipping all previous steps.
 =cut
 
 sub build {
+    get();
     my %opts;
     my @stages = ('a', 'b', 'c', 'i', 'l', 'p', 's');
     getopts(join('', @stages, 'o'), \%opts);
@@ -236,8 +237,8 @@ nor at file store are downloaded.
 =cut
 
 sub fetch {
-    my $spec = init_spec();
-    my $abfyml = read_abfyml();
+    my $spec = shift || init_spec();
+    my $abfyml = shift || read_abfyml();
 
     my @sourceurls = ($spec->sources_url(), $spec->icon_url());
     @sourceurls = map { m/^(https?|ftp):/ ? $_ : () } @sourceurls;
@@ -247,7 +248,7 @@ sub fetch {
         unless (-f $& or
             $abfyml->{sources}{$&} and checkfilestore($abfyml->{sources}{$&}))
         {
-            print "$&\n";
+            print "downloading $&\n";
             download($_, $&);
         }
     }
@@ -270,7 +271,7 @@ sub get {
     foreach (@sourceurls) {
         m([^/]+$);
         unless (-f $&) {
-            print "$&\n";
+            print "downloading $&\n";
             if (my $sha1 = $abfyml->{sources}{$&}) {
                 download("$baseurl/download/$sha1", $&);
             } else {
@@ -325,7 +326,10 @@ sub pushcmd {
     my $git = Git->repository(cwd())
         or die "Not in the git working directory\n";
 
-    $git->command('push', @_);
+    sync($git);
+    $git->command_noisy('commit', '-a')
+        if $git->command('status', '--short', '--untracked-files=no');
+    $git->command('push', @ARGV);
     upload();
 }
 
@@ -486,12 +490,13 @@ sub sync {
     my $specfile = find_spec();
     my $spec = init_spec($specfile);
     my @sources = ($specfile, $spec->sources(), $spec->icon());
-    my $git = Git->repository(cwd())
+    my $git = shift || Git->repository(cwd())
         or die "Not in the git working directory\n";
     my @trackedfiles = split /\n/, $git->command('ls-files');
     my @filestoupload;
     my $abfyml = read_abfyml();
 
+    fetch($spec, $abfyml);
     if ($abfyml) {
         foreach my $file (keys %{$abfyml->{sources}}) {
             if ($file ~~ @sources) {
