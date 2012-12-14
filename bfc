@@ -57,7 +57,7 @@ display info about ABF project
 
 push local changes to ABF
 
-=item status
+=item st[atus]
 
 display status of recent builds on ABF
 
@@ -312,7 +312,7 @@ sub get {
 
 =head2 info
 
-    bfc info <owner>/<project>
+I<bfc> I<info> <owner>/<project>
 
 Show information about specified ABF project.
 
@@ -415,10 +415,12 @@ one specified in configuration file as default.
 Git revision (commit hash, branch or tag). If not specified, the current
 branch will be used.
 
--s <severity>
+=item -s <severity>
 
 Update severity. If not specified, the default value from configuration file
 will be used.
+
+=back
 
 =cut
 
