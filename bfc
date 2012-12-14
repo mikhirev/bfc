@@ -312,14 +312,15 @@ sub get {
 
 =head2 info
 
-I<bfc> I<info> <owner>/<project>
+I<bfc> I<info> <project>
 
-Show information about specified ABF project.
+Show information about specified ABF project. Project can be specified as
+<owner>/<name> or <name> (default owner will be used).
 
 =cut
 
 sub info {
-    my $fullname = shift @ARGV;
+    my $fullname = fullname(shift @ARGV);
     die "Usage: bfc info <owner>/<project>" unless $fullname && $fullname =~ m|^[^/]+/[^/]+$|;
     my $abf = ABF->new( baseurl     => $config->val('abf', 'baseurl'),
                         login       => abf_username(),
