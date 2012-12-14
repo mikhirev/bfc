@@ -786,7 +786,7 @@ sub fullname {
     if ($name =~ m{^[\w+.-]+/[\w+.-]+$}) {
         return $name;
     } elsif ($name =~ m{^[\w+.-]+$}) {
-        my $owner = $config->val('defaults', 'owner')
+        my $owner = $config->val('defaults', 'owner') || abf_username()
             or die "cannot guess owner of project $name";
         return "$owner/$name";
     } else {
