@@ -37,6 +37,10 @@ bfc <action> [options]
 
 build package locally
 
+=item c[lone]
+
+clone project to local directory
+
 =item f[etch]
 
 fetch new sources from upstream
@@ -91,6 +95,7 @@ my $action = shift @ARGV || "";
 for ($action) {
     /^b(uild)?$/                ?   build()         :
     /^c(lean)?[-_]?t(ree)?$/    ?   cleantree()     :
+    /^c(lone)?$/                ?   clone()         :
     /^f(etch)?$/                ?   fetch()         :
     /^g(et)?$/                  ?   get()           :
     /^i(nfo)?$/                 ?   info()          :
@@ -230,6 +235,27 @@ sub cleantree {
     }
 
     YAML::XS::DumpFile('.abf.yml', $abfyml);
+}
+
+=head2 clone
+
+I<bfc> I<clone> <project> [options]
+
+Clone ABF git repository to local directory. <project> can be specified as
+I<owner>/I<name> or I<name> (default owner will be used). See L<git-clone> for
+options.
+
+=cut
+
+sub clone {
+    my $projname = shift @ARGV;
+    $projname = fullname($projname);
+    my $abf = ABF->new( baseurl     => $config->val('abf', 'baseurl'),
+                        login       => abf_username(),
+                        password    => abf_password()
+    );
+    my $project = $abf->project(fullname => $projname);
+    Git::command_noisy('clone', $project->git_url(), @ARGV);
 }
 
 =head2 fetch
@@ -751,6 +777,20 @@ sub abf_password {
 sub abf_hostname {
     $config->val('abf', 'baseurl') =~ m{(?<=://)([a-z0-9-.]+)};
 }
+
+sub fullname {
+    my $name = shift;
+    if ($name =~ m{^[\w+.-]+/[\w+.-]+$}) {
+        return $name;
+    } elsif ($name =~ m{^[\w+.-]+$}) {
+        my $owner = $config->val('defaults', 'owner')
+            or die "cannot guess owner of project $name";
+        return "$owner/$name";
+    } else {
+        die "invalid project name $name";
+    }
+}
+
 __END__
 
 =head1 COPYRIGHT
