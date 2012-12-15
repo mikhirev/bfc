@@ -374,23 +374,9 @@ sub status {
                         login       => abf_username(),
                         password    => abf_password()
                     );
-
-    format STDOUT=
----
-Build:  @<<<<<<<           Project:    @<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
-        $_->id(),                      $_->project('fullname'),
-Status: @<<<<<<<<<<<<<<<<< Commit:     @<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
-        $_->strstatus()    ,           $_->commit_hash(),
-                           Repository: @<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
-             $_->build_for_platform('name').'/'.$_->save_to_repository('name'),
-                           Arch:       @<<<<<
-                                       $_->arch('name'),
-.
-
     foreach ($abf->buildlists) {
-        write();
+        print_buildlist($_);
     }
-
 }
 
 =head2 submit
@@ -501,11 +487,7 @@ sub submit {
                                             build_requires          => JSON::false,
                                             include_repos           => \@includerepos,
                                             arch_id                 => $_ );
-        print 'Build list ' . $bl->id() . ' for ' . $bl->name() .
-            ' with ' . $bl->arch('name') . " architecture created\n";
-        print 'the package will be published in ' .
-            $bl->save_to_repository('platform', 'name') . '/' .
-            $bl->save_to_repository('name'). "\n\n";
+        print_buildlist($bl);
     }
 }
 
@@ -792,6 +774,24 @@ sub fullname {
     } else {
         die "invalid project name $name";
     }
+}
+
+sub print_buildlist {
+    my $bl = shift;
+
+    format STDOUT=
+---
+Build:  @<<<<<<<           Project:    @<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+        $bl->id(),                     $bl->project('fullname'),
+Status: @<<<<<<<<<<<<<<<<< Commit:     @<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+        $bl->strstatus()    ,          $bl->commit_hash(),
+                           Repository: @<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+           $bl->build_for_platform('name').' '.$bl->save_to_repository('name'),
+                           Arch:       @<<<<<
+                                       $bl->arch('name'),
+.
+
+    write()
 }
 
 __END__
