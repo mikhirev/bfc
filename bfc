@@ -9,7 +9,6 @@ use Git;
 use YAML::XS;
 use HTTP::SimpleLinkChecker qw(check_link);
 use Digest::SHA1;
-use LWP::Simple qw(getstore is_error);
 use LWP::UserAgent;
 use HTTP::Request::Common qw(POST);
 use HTTP::Status qw(status_message);
@@ -655,11 +654,12 @@ sub set_rpm_dirs {
 
 sub download {
     my ($url, $file) = @_;
-    my $rc = getstore($url, $file);
-    if (is_error($rc)) {
-        my $message = status_message($rc);
-        warn "Can't download $_: $rc: $message\n";
-    }
+    my $ua = LWP::UserAgent->new();
+    $ua->show_progress(1);
+    $ua->ssl_opts( SSL_ca_path => '/etc/pki/tls/rootcerts' )
+        unless $ua->ssl_opts('SSL_ca_path') || $ua->ssl_opts('SSL_ca_file');
+    my $response = $ua->get($url, ':content_file' => $file);
+    warn "Can't download $url\n" if $response->is_error();
 }
 
 sub fs_upload {
