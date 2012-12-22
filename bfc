@@ -30,11 +30,15 @@ bfc <action> [options]
 
 =head2 Actions:
 
-=over 8
+=over 12
 
 =item b[uild]
 
 build package locally
+
+=item can[cel]
+
+cancel builds
 
 =item c[lone]
 
@@ -52,9 +56,17 @@ get all sources for local build
 
 display info about ABF project
 
+=item pub[lish]
+
+publish built packages
+
 =item p[ush]
 
 push local changes to ABF
+
+=item rej[ect]
+
+reject packages publication
 
 =item st[atus]
 
@@ -93,12 +105,15 @@ my $action = shift @ARGV || "";
 
 for ($action) {
     /^b(uild)?$/                ?   build()         :
+    /^ca?n(cel)?$/              ?   cancel()        :
     /^c(lean)?[-_]?t(ree)?$/    ?   cleantree()     :
     /^c(lone)?$/                ?   clone()         :
     /^f(etch)?$/                ?   fetch()         :
     /^g(et)?$/                  ?   get()           :
     /^i(nfo)?$/                 ?   info()          :
-    /^p(ush)?$/		        ?   pushcmd()       :
+    /^pub(lish)?$/              ?   publish()       :
+    /^p(ush)?$/                 ?   pushcmd()       :
+    /^rej(ect)?$/               ?   reject()        :
     /^st(atus)?$/               ?   status()        :
     /^su?b(mit)?$/              ?   submit()        :
     /^s(ync)?$/                 ?   sync()          :
@@ -183,6 +198,34 @@ sub build {
         verbose     => 2
     );
     eval { $builder->build(find_spec(), %buildopts) };
+}
+
+=head2 cancel
+
+I<bfc> I<cancel> <ID>...
+
+Cancel buildlists with specified IDs.
+
+=cut
+
+sub cancel {
+    my $abf = ABF->new( baseurl     => $config->val('abf', 'baseurl'),
+                        login       => abf_username(),
+                        password    => abf_password()
+    );
+    foreach (@ARGV) {
+        if (/^\d+$/) {
+            my $bl = $abf->buildlist(id => $_);
+            my $result = eval { $bl->cancel() };
+            if ($result->{is_canceled}) {
+                print "Build $_ canceled\n";
+            } else {
+                warn "Error canceling build $_: $result->{message}\n";
+            }
+        } else {
+            warn "Wrong build ID $_\n";
+        }
+    }
 }
 
 =head2 cleantree
@@ -340,6 +383,34 @@ sub info {
     eval { print "\nDescription:\n" . $project->description() . "\n" };
 }
 
+=head2 publish
+
+I<bfc> I<publish> <ID>...
+
+Publish buildlists with specified IDs.
+
+=cut
+
+sub publish {
+    my $abf = ABF->new( baseurl     => $config->val('abf', 'baseurl'),
+                        login       => abf_username(),
+                        password    => abf_password()
+    );
+    foreach (@ARGV) {
+        if (/^\d+$/) {
+            my $bl = $abf->buildlist(id => $_);
+            my $result = eval { $bl->publish() };
+            if ($result->{is_published}) {
+                print "Build $_ published\n";
+            } else {
+                warn "Error publishing build $_: $result->{message}\n";
+            }
+        } else {
+            warn "Wrong build ID $_\n";
+        }
+    }
+}
+
 =head2 push
 
 Push all commited changes to origin (like git push) and upload all files
@@ -360,6 +431,34 @@ sub pushcmd {
         if $git->command('status', '--short', '--untracked-files=no');
     $git->command('push', @ARGV);
     upload();
+}
+
+=head2 reject
+
+I<bfc> I<reject> <ID>...
+
+Reject buildlists with specified IDs.
+
+=cut
+
+sub reject {
+    my $abf = ABF->new( baseurl     => $config->val('abf', 'baseurl'),
+                        login       => abf_username(),
+                        password    => abf_password()
+    );
+    foreach (@ARGV) {
+        if (/^\d+$/) {
+            my $bl = $abf->buildlist(id => $_);
+            my $result = eval { $bl->reject() };
+            if ($result->{is_rejected}) {
+                print "Build $_ rejected\n";
+            } else {
+                warn "Error rejecting build $_: $result->{message}\n";
+            }
+        } else {
+            warn "Wrong build ID $_\n";
+        }
+    }
 }
 
 =head2 status
