@@ -26,7 +26,7 @@ bfc - ABF command-line client
 
 =head1 SYNOPSIS
 
-bfc <action> [options]
+I<bfc> <action> [options]
 
 =head2 Actions:
 
@@ -504,7 +504,7 @@ Automatically publish packages.
 =item -p <platform>
 
 Specify target platform. If it is not specified explicitly, bfc will try to
-use platform with the same name as current git brunch, if it exists, or the
+use platform with the same name as current git branch, if it exists, or the
 one specified in configuration file as default.
 
 =item -r <revision>
@@ -617,7 +617,6 @@ sub sync {
     my $git = shift || Git->repository(cwd())
         or die "Not in the git working directory\n";
     my @trackedfiles = split /\n/, $git->command('ls-files');
-    my @filestoupload;
     my $abfyml = read_abfyml();
 
     fetch($spec, $abfyml);
@@ -625,7 +624,6 @@ sub sync {
         foreach my $file (keys %{$abfyml->{sources}}) {
             if ($file ~~ @sources) {
                 unless (checkfilestore($abfyml->{sources}{$file})) {
-                    push @filestoupload, $file;
                 }
             } else {
                 delete $abfyml->{sources}{$file};
@@ -649,7 +647,6 @@ sub sync {
                     $abfyml->{sources}{$file} = $ctx->hexdigest();
                     print "$file added to .abf.yml\n";
                     unless (checkfilestore($abfyml->{sources}{$file})) {
-                        push @filestoupload, $file;
                     }
                 }
             } else {
@@ -675,11 +672,6 @@ sub sync {
             $git->command('rm', $file);
             print "$file removed\n";
         }
-    }
-
-    if (@filestoupload) {
-        print "\nFiles to be uploaded to file store:\n";
-        print join("\n", @filestoupload) . "\n";
     }
 }
 
