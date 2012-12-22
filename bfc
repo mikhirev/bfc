@@ -463,7 +463,9 @@ sub reject {
 
 =head2 status
 
-Show status of last builds submitted by current user.
+I<bfc> I<status> [<ID>...]
+
+Show status of specified builds or last builds submitted by current user.
 
 =cut
 
@@ -472,8 +474,18 @@ sub status {
                         login       => abf_username(),
                         password    => abf_password()
                     );
-    foreach ($abf->buildlists) {
-        print_buildlist($_);
+    if (@ARGV) {
+        foreach (@ARGV) {
+            if (/^\d+$/) {
+                print_buildlist($abf->buildlist(id => $_));
+            } else {
+                warn "Invalid build ID $_\n";
+            }
+        }
+    } else {
+        foreach ($abf->buildlists) {
+            print_buildlist($_);
+        }
     }
 }
 
