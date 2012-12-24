@@ -74,7 +74,7 @@ display status of recent builds on ABF
 
 =item s[u]b[mit]
 
-submit project build to ABF
+submit project build to ABF (experimental)
 
 =item s[ync]
 
@@ -491,7 +491,8 @@ sub status {
 
 =head2 submit
 
-Submit project build to ABF.
+Submit project build to ABF. This is an experimental feature, its behavior may
+change in future releases. It does not work with personal platforms ATM.
 
 =head3 options
 
