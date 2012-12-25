@@ -769,6 +769,10 @@ sub download {
 sub fs_upload {
     my $baseurl = fs_baseurl();
     my @results;
+    my $ua = LWP::UserAgent->new;
+    my ($protocol, $host, $port) = $baseurl =~ m|^(\w+)://([\w.-]+)(?::(\d+))?|;
+    $port = $protocol eq 'https' ? 443 : 80 unless $port;
+    $ua->credentials("$host:$port", 'Application', fs_username(), fs_password());
     foreach (@_) {
         my ($filename) = m{([^/]+)$};
         my $url = "$baseurl/api/v1/upload";
@@ -777,7 +781,6 @@ sub fs_upload {
                 Content_Type    => 'form-data',
                 Content         => [ name               => $filename,
                                     'file_store[file]'  => [$_] ];
-        my $ua = LWP::UserAgent->new;
         print "Uploading $filename\n";
         my $result = $ua->request($request);
         if ($result->is_error()) {
@@ -793,10 +796,6 @@ sub fs_upload {
 
 sub fs_baseurl {
     my $url = $config->val('file-store', 'baseurl');
-    my $username = fs_username();
-    my $password = fs_password();
-
-    $url =~ s|(^\w+://)|$1${username}:${password}@|;
     $url =~ s|/$||;
     return $url;
 }
