@@ -900,6 +900,16 @@ Status: @<<<<<<<<<<<<<<<<< Commit:     @<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 __END__
 
+=head1 CONFIGURATION FILES
+
+Global configuration is stored in I</etc/bfc.conf>. See comments in that 
+for further information. User settings in I<$HOME/.bfc.conf> override glo
+settings.
+
+Authentication data for AFB and ABF File Store can be taken from
+I<$HOME/.netrc> file. See L<netrc(5)> man page. Note that there must be
+separate records for ABF itself and File Store.
+
 =head1 COPYRIGHT
 
 Copyright (C) 2012, Dmitry Mikhirev
